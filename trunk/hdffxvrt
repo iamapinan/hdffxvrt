@@ -19,14 +19,20 @@ URL=http://code.google.com/p/hdffxvrt/
 ## permissions and limitations under the License.
 
 # default path to ffmpeg
+
 FFMPEG=ffmpeg # use whatever is in $PATH
 
 # default input size
+
 isize=1440x1080 # 1080i camera with a 4:3 pixel aspect ratio
-irate=25
-orate=25
+
+# frame rates: 25 or 29.97
+
+irate=25 # input
+orate=25 # output
 
 # default preset
+
 PRESET=medium # as below
 
 ##################################################################
