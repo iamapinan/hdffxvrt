@@ -1,0 +1,319 @@
+#!/bin/sh
+
+VERSION=3.5
+NAME=hdffxvrt
+URL=http://code.google.com/p/hdffxvrt/
+
+## Copyright 2008 Alec Muffett (alec.muffett@gmail.com)
+##
+## Licensed under the Apache License, Version 2.0 (the "License"); you
+## may not use this file except in compliance with the License. You
+## may obtain a copy of the License at
+##
+## http://www.apache.org/licenses/LICENSE-2.0
+##
+## Unless required by applicable law or agreed to in writing, software
+## distributed under the License is distributed on an "AS IS" BASIS,
+## WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+## implied. See the License for the specific language governing
+## permissions and limitations under the License.
+
+# default path to ffmpeg
+FFMPEG=ffmpeg # use whatever is in $PATH
+
+# default input size
+isize=1440x1080 # 1080i camera with a 4:3 pixel aspect ratio
+irate=25
+orate=25
+
+# default preset
+PRESET=medium # as below
+
+##################################################################
+
+# big scratch area for audio rips
+TMPDIR=/var/tmp
+
+# double the irate
+irate2=`echo "$irate * 2" | bc`
+
+# macros for the preset processing
+# 1:1 / square pixel ratios from
+# http://en.wikipedia.org/wiki/HD_video
+
+MACRO_SIZE_HUGE=1920x1080
+MACRO_SIZE_LARGE=1366×768
+MACRO_SIZE_MEDIUM=1280x720
+MACRO_SIZE_SMALL=640x360
+MACRO_SIZE_THUMB=320x180
+
+MACRO_VIDEO_MJPEG="-vcodec mjpeg -sameq -shortest -f mov"
+MACRO_VIDEO_MPEG4="-vcodec mpeg4 -sameq -shortest -f mov"
+
+MACRO_AUDIO_AAC="-acodec libfaac -ac 2 -ab 128k -ar 44100"
+MACRO_AUDIO_THUMB="-acodec libfaac -ac 1 -ab 64k -ar 22050"
+
+# do not mess with MACRO_AUDIO_RAW/COPY- there is a temporary file for
+# the extracted audio below, created with a ".wav" suffix, which needs
+# to be in agreement with the MACRO_AUDIO_RAW settings
+
+MACRO_AUDIO_RAW="-acodec pcm_s16le -ac 2" # do not touch
+MACRO_AUDIO_COPY="-acodec copy" # do not touch
+
+##################################################################
+
+# argument parsing
+
+PUT_HERE=false
+
+while :
+do
+    case "$1" in
+	-d)
+	    set -x
+	    ;;
+
+	-p)
+	    shift
+	    PRESET=$1
+	    shift
+	    ;;
+
+	-i)
+	    shift
+	    isize=$1
+	    shift
+	    ;;
+
+	-x)
+	    shift
+	    PUT_HERE=true
+	    ;;
+
+	*)
+	    break
+	    ;;
+    esac
+done
+
+##################################################################
+
+# no arguments
+
+if [ "x$1" = x ]
+then
+#------------------------------------------------------------------
+    cat 1>&2 <<EOF
+hdffxvrt $VERSION (c)2009 Alec.Muffett@gmail.com
+
+Usage: $NAME [options] filename.mts ...
+
+Options:
+    -d         # enables debugging
+    -p PRESET  # enables PRESET settings, below
+    -i SIZE    # specify raw input size
+    -x         # create output in current working directory
+
+Presets:
+    thumb      # $MACRO_SIZE_THUMB mpeg4 + aac audio (10 second thumbnail)
+    small      # $MACRO_SIZE_SMALL mpeg4 + aac audio
+    medium     # $MACRO_SIZE_MEDIUM mpeg4 + aac audio (default)
+    large      # $MACRO_SIZE_LARGE mpeg4 + aac audio
+    huge       # $MACRO_SIZE_HUGE mpeg4 + aac audio (very silly)
+    edit-mp4   # $MACRO_SIZE_MEDIUM mpeg4 keyframes + raw audio
+    edit-mj    # $MACRO_SIZE_MEDIUM mjpeg + raw audio
+    edit       # shorthand for 'edit-mj'
+
+Examples:
+
+  Convert MTS files to 720p suitable for iMovie editing
+    $NAME -p edit *.mts
+
+  Create short 'video thumbnails' as an aide-memoire
+    $NAME -p thumb *.mts
+
+  Convert stuff from another disk or server, put in current directory
+    $NAME -x -p small /somewhere/else/*.mts
+
+Basic file locking is performed upon the output file so that on
+multi-core machines, multiple instances of $NAME can be run in
+parallel in separate shells, to take maximum advantage of multiple
+cpus/cores.
+
+I recommend storing the original MTS files, as they are going to be
+much smaller than anything of comparable quality that ffmpeg produces.
+
+See the project homepage at $URL for documentation, wiki and updates.
+
+EOF
+#------------------------------------------------------------------
+    exit 1
+fi
+
+##################################################################
+
+# mode of output
+case $PRESET in
+
+    # am assuming editing is done at MEDIUM/720p
+    # with raw audio and best quality video
+
+    edit|edit-mj)
+	osize=$MACRO_SIZE_MEDIUM
+	oaudio_in="$MACRO_AUDIO_RAW"
+	oaudio_out="$MACRO_AUDIO_COPY"
+	ovideo="$MACRO_VIDEO_MJPEG"
+	osuffix=$PRESET.mov
+	;;
+
+    edit-mp4)
+	osize=$MACRO_SIZE_MEDIUM
+	oaudio_in="$MACRO_AUDIO_RAW"
+	oaudio_out="$MACRO_AUDIO_COPY"
+	ovideo="$MACRO_VIDEO_MPEG4 -intra"
+	osuffix=$PRESET.mov
+	;;
+
+    # playback presets below
+
+    huge) # novelty, not meant for serious use
+	osize=$MACRO_SIZE_HUGE
+	oaudio_in="$MACRO_AUDIO_RAW"
+	oaudio_out="$MACRO_AUDIO_COPY"
+	ovideo="$MACRO_VIDEO_MPEG4"
+	osuffix=$PRESET.mov
+	;;
+
+    large)
+	osize=$MACRO_SIZE_LARGE
+	oaudio_in="$MACRO_AUDIO_RAW"
+	oaudio_out="$MACRO_AUDIO_AAC"
+	ovideo="$MACRO_VIDEO_MPEG4"
+	osuffix=$PRESET.mov
+	;;
+
+    medium)
+	osize=$MACRO_SIZE_MEDIUM
+	oaudio_in="$MACRO_AUDIO_RAW"
+	oaudio_out="$MACRO_AUDIO_AAC"
+	ovideo="$MACRO_VIDEO_MPEG4"
+	osuffix=$PRESET.mov
+	;;
+
+    small)
+	osize=$MACRO_SIZE_SMALL
+	oaudio_in="$MACRO_AUDIO_RAW"
+	oaudio_out="$MACRO_AUDIO_AAC"
+	ovideo="$MACRO_VIDEO_MPEG4"
+	osuffix=$PRESET.mov
+	;;
+
+    thumb)
+	osize=$MACRO_SIZE_THUMB
+	itruncate="-t 00:00:10" # only set here for thumbnails
+	oaudio_in="$MACRO_AUDIO_RAW"
+	oaudio_out="$MACRO_AUDIO_THUMB"
+	ovideo="$MACRO_VIDEO_MPEG4"
+	osuffix=$PRESET.mov
+	;;
+
+    *)
+	echo $NAME: fatal wtf - unknown preset value $PRESET
+	exit 1
+	;;
+
+esac # end of presets processing
+
+##################################################################
+
+# process all the files, individually
+for input in $@
+do
+    # check the file suffix
+    case $input in
+	*.MTS) ;; # ok
+	*.mts) ;; # ok
+	*.M2TS) ;; # ok
+	*.m2ts) ;; # ok
+	*) echo cannot do $input, unknown format/file extension ; continue ;;
+    esac
+
+    ##################################################################
+
+    # output for foo.mts -> foo.mts.$osuffix
+    output=$input.$osuffix
+
+    drop the output here rather than in the same directory as src
+    if $PUT_HERE
+    then
+	output=`basename $output`
+    fi
+
+    # lock for foo.mts -> foo.mts.lock/
+    lock=$output.lock
+
+    ##################################################################
+
+    # line for clarity
+    echo "=================================================================="
+
+    # skip if output already exists
+    if [ -f $output ]
+    then
+	echo cannot do $input, existing file $output
+	continue
+    fi
+
+    # skip if lockdir already exists
+    if mkdir $lock
+    then
+	echo got lock on $lock, continuing...
+    else
+	echo cannot do $input, cannot get lock $lock
+	continue
+    fi
+
+    ##################################################################
+
+    XAUDIO=$TMPDIR/ffxaudio$$.wav # scratch file
+    XVIDEO=- # pipe
+
+    # extract audio in target format
+    ffmpeg -y $itruncate -i $input -vn $oaudio_in $XAUDIO
+
+    # line for clarity
+    echo "------------------------------------------------------------------"
+
+    # extract video in raw format, and pipe into merge/re-encode
+    ffmpeg -y $itruncate \
+	-i $input \
+	-an \
+	-pix_fmt yuv420p -f rawvideo $XVIDEO |
+    ffmpeg -y \
+	-i $XAUDIO \
+	-r $irate2 -deinterlace -s $isize -pix_fmt yuv420p -f rawvideo -i $XVIDEO \
+	-r $orate -s $osize $ovideo \
+	$oaudio_out \
+	$output
+
+    # delete the extracted audio
+    rm $XAUDIO
+
+    ##################################################################
+
+    # release the lock
+    rm -r $lock
+
+    # a few blank lines for clarity
+    echo ""
+    echo ""
+    echo ""
+    echo ""
+done
+
+##################################################################
+
+stty sane # just in case
+
+# done
+exit 0
