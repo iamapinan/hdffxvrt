@@ -1,6 +1,6 @@
 #!/bin/sh
 
-VERSION=3.5
+VERSION=3.6
 NAME=hdffxvrt
 URL=http://code.google.com/p/hdffxvrt/
 
@@ -169,7 +169,7 @@ case $PRESET in
 	oaudio_in="$MACRO_AUDIO_RAW"
 	oaudio_out="$MACRO_AUDIO_COPY"
 	ovideo="$MACRO_VIDEO_MJPEG"
-	osuffix=$PRESET.mov
+	osuffix=edit-mj.mov # this one needed disambiguation
 	;;
 
     edit-mp4)
