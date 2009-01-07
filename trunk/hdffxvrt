@@ -249,7 +249,7 @@ do
 	output=`basename $output`
     fi
 
-    # lock for foo.mts -> foo.mts.lock/
+    # lock for foo.mts.PRESET.mov -> foo.mts.PRESET.mov.lock/
     lock=$output.lock
 
     ##################################################################
