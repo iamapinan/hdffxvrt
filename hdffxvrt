@@ -210,7 +210,7 @@ case $PRESET in
 
     thumb)
 	osize=$MACRO_SIZE_THUMB
-	itruncate="-t 00:00:10" # only set here for thumbnails
+	itruncate="-t 00:00:20" # only set here for thumbnails; 20s -> 10s
 	oaudio_in="$MACRO_AUDIO_RAW"
 	oaudio_out="$MACRO_AUDIO_THUMB"
 	ovideo="$MACRO_VIDEO_MPEG4"
@@ -243,7 +243,7 @@ do
     # output for foo.mts -> foo.mts.$osuffix
     output=$input.$osuffix
 
-    drop the output here rather than in the same directory as src
+    # drop the output here rather than in the same directory as src
     if $PUT_HERE
     then
 	output=`basename $output`
